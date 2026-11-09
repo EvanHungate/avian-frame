@@ -265,13 +265,26 @@ def signature(species):
 def render(species, style=None, out=None) -> Image.Image:
     style = style or STYLE or Style()
     tmp = out or os.path.join(CFG["data"], "render.png")
-    shoot.shoot_birdweather(
-        tmp, species, title=CFG["title"], subtitle=CFG["subtitle"],
-        vw=W, vh=H, dsf=2, collage_vh=CFG["collage_vh"],
-        headline_px=CFG["headline_px"], eyebrow_px=CFG["eyebrow_px"],
-        bird_names=CFG["bird_names"], count_exp=CFG["count_exp"], timeout_ms=120_000,
-        **style.shoot_kwargs(),
-    )
+    # Some art sets (odd silhouettes, scenery around Audubon's birds) leave a
+    # tile with no clean edge for its name at 800x480. Retry with smaller
+    # labels, then once more without names, rather than failing the frame.
+    attempts = [{"bird_names": CFG["bird_names"]}]
+    if CFG["bird_names"]:
+        attempts += [{"bird_names": True, "label_min_px": 8}, {"bird_names": False}]
+    for i, extra in enumerate(attempts):
+        try:
+            shoot.shoot_birdweather(
+                tmp, species, title=CFG["title"], subtitle=CFG["subtitle"],
+                vw=W, vh=H, dsf=2, collage_vh=CFG["collage_vh"],
+                headline_px=CFG["headline_px"], eyebrow_px=CFG["eyebrow_px"],
+                count_exp=CFG["count_exp"], timeout_ms=120_000,
+                **extra, **style.shoot_kwargs(),
+            )
+            break
+        except RuntimeError as e:
+            if "labels missing" not in str(e) or i == len(attempts) - 1:
+                raise
+            log.warning("%s - retrying with %s", e, attempts[i + 1])
     img = Image.open(tmp).convert("RGB")
     return img.resize((W, H), Image.LANCZOS)
 
