@@ -59,6 +59,9 @@ CFG = {
     "subtitle": env("SUBTITLE", "Heard This Week"),
     "bird_names": env("BIRD_NAMES", "1") not in ("0", "false", "no", "off"),
     "refresh_min": int(env("REFRESH_MIN", "30")),
+    # Daily mode: the device wakes only at these local times (comma-separated).
+    # Leave empty to wake every REFRESH_MIN instead (with quiet hours).
+    "wake_times": [t.strip() for t in env("WAKE_TIMES", "07:00").split(",") if t.strip()],
     "quiet_start": int(env("QUIET_START", "22")),  # device sleeps through these hours
     "quiet_end": int(env("QUIET_END", "6")),       # set both to 0 to disable
     "tz": ZoneInfo(env("TZ", "America/Toronto")),
@@ -209,10 +212,28 @@ def worker():
         S.force.wait(CFG["refresh_min"] * 60)
 
 
+def next_wake(now):
+    """Next WAKE_TIMES slot after `now` (at least 30 min away, so a device that
+    woke a little early for a slot doesn't immediately wake again for it)."""
+    best = None
+    for t in CFG["wake_times"]:
+        h, m = (int(x) for x in t.split(":"))
+        for d in (0, 1, 2):
+            w = (now + dt.timedelta(days=d)).replace(hour=h, minute=m, second=0, microsecond=0)
+            if w - now > dt.timedelta(minutes=30):
+                best = w if best is None or w < best else best
+                break
+    return best
+
+
 def sleep_seconds():
-    """How long the device should deep-sleep: until just after the next render,
-    or until QUIET_END if we're inside quiet hours."""
+    """How long the device should deep-sleep. Daily mode: until the next
+    WAKE_TIMES slot. Otherwise until just after the next render, or until
+    QUIET_END if we're inside quiet hours. The server recomputes this on every
+    wake, so the ESP32's drifty sleep timer never accumulates error."""
     now = dt.datetime.now(CFG["tz"])
+    if CFG["wake_times"]:
+        return int((next_wake(now) - now).total_seconds())
     qs, qe = CFG["quiet_start"], CFG["quiet_end"]
     if qs != qe:
         quiet = (qs <= now.hour < qe) if qs < qe else (now.hour >= qs or now.hour < qe)

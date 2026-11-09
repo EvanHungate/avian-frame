@@ -27,6 +27,7 @@ services:
       SATURATION: "1.35"       # push colour a bit; Spectra 6 inks are muted
       CONTRAST: "1.1"
       # --- cadence -----------------------------------------------------------
-      REFRESH_MIN: "30"        # how often to re-check BirdWeather
-      QUIET_START: "22"        # device sleeps 22:00-06:00 (set both 0 to disable)
+      WAKE_TIMES: "07:00"      # frame wakes + redraws once a day at 7 am (e.g. "07:00,17:00" for twice)
+      REFRESH_MIN: "30"        # how often the server re-checks BirdWeather
+      QUIET_START: "22"        # only used if WAKE_TIMES is empty
       QUIET_END: "6"
