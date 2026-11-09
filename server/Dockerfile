@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends git tzdata \
  && rm -rf /var/lib/apt/lists/* \
  && git clone --depth 1 --branch "$AV_REF" "$AV_REPO" /opt/AvianVisitors \
  && cd /opt/AvianVisitors && find . -mindepth 1 -maxdepth 1 ! -name avian ! -name frame -exec rm -rf {} + \
+ && chmod -R go-w /opt/AvianVisitors \
  && pip install --no-cache-dir -r /opt/AvianVisitors/frame/requirements-shoot.txt numpy \
  && playwright install --with-deps chromium
 
