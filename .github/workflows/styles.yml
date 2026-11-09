@@ -1,5 +1,5 @@
 # Renders the frame in every illustration style with live birds from the
-# station, and (if a GEMINI_API_KEY repo secret exists) generates the custom
+# station, and (if a KIE_API_KEY or GEMINI_API_KEY repo secret exists) generates the custom
 # styles first. Results are committed to previews/ and server/styles/.
 # Run it from the Actions tab: "styles" -> "Run workflow".
 name: styles
@@ -13,6 +13,10 @@ on:
   push:
     branches: [main]
     paths: ["server/preview_styles.py", "server/stylegen.py", "server/styles/*.prompt.md", ".github/workflows/styles.yml"]
+
+concurrency:
+  group: styles
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -32,6 +36,7 @@ jobs:
       STYLES_DIR: ${{ github.workspace }}/server/styles
       DATA_DIR: /tmp/avian-preview
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
       GENERATE: ${{ github.event.inputs.generate || 'ghibli linocut' }}
     steps:
       - uses: actions/checkout@v4
@@ -44,16 +49,16 @@ jobs:
           chmod -R go-w $AV_ROOT   # upstream's bundle runtime refuses group/world-writable files
           pip install -r $AV_FRAME_DIR/requirements-shoot.txt numpy
           python -m playwright install --with-deps chromium
-      - name: Generate custom styles (Gemini)
-        if: env.GEMINI_API_KEY != ''
+      - name: Generate custom styles (kie.ai or Gemini)
+        if: env.KIE_API_KEY != '' || env.GEMINI_API_KEY != ''
         run: |
           pip install -r $AV_ROOT/avian/scripts/requirements.txt
           for s in $GENERATE; do
             python server/stylegen.py --style "$s" --station "$BW_STATION_ID" --limit 24 || echo "::warning::$s generation failed"
           done
-      - name: No Gemini key
-        if: env.GEMINI_API_KEY == ''
-        run: echo "::notice::GEMINI_API_KEY secret not set - skipping generated styles (ghibli, linocut)"
+      - name: No image-generation key
+        if: env.KIE_API_KEY == '' && env.GEMINI_API_KEY == ''
+        run: echo "::notice::No KIE_API_KEY or GEMINI_API_KEY secret - skipping generated styles (ghibli, linocut)"
       - name: Render previews
         run: python server/preview_styles.py --out previews woodblock impressionist audubon $GENERATE
       - name: Commit results
@@ -64,6 +69,7 @@ jobs:
           git add previews server/styles
           if git diff --cached --quiet; then echo "nothing new"; exit 0; fi
           git commit -m "Update style previews"
+          git pull --rebase -X theirs
           git push
           # bot pushes don't trigger other workflows, so rebuild the image explicitly
           # (new generated styles get baked into it)
