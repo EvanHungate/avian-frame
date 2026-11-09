@@ -67,6 +67,7 @@ CFG = {
     "collage_vh": float(env("COLLAGE_VH", "80")),
     "headline_px": int(env("HEADLINE_PX", "30")),
     "eyebrow_px": int(env("EYEBROW_PX", "13")),
+    "count_exp": float(env("COUNT_EXP", "0.6")),  # bird size vs detections; 1.0 = loudest dominates
     "port": int(env("PORT", "8088")),
     "data": env("DATA_DIR", "/data"),
 }
@@ -139,7 +140,7 @@ def render(species) -> Image.Image:
         tmp, species, title=CFG["title"], subtitle=CFG["subtitle"],
         vw=W, vh=H, dsf=2, collage_vh=CFG["collage_vh"],
         headline_px=CFG["headline_px"], eyebrow_px=CFG["eyebrow_px"],
-        bird_names=CFG["bird_names"], timeout_ms=120_000,
+        bird_names=CFG["bird_names"], count_exp=CFG["count_exp"], timeout_ms=120_000,
     )
     img = Image.open(tmp).convert("RGB")
     return img.resize((W, H), Image.LANCZOS)
