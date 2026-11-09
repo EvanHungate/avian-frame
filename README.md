@@ -4,13 +4,13 @@ A remake of Teddy Warner's [Avian Visitors](https://theodore.net/projects/AvianV
 
 ```
 BirdWeather ──► render server (Docker, any PC)  ──► reTerminal E1002
-                - top birds near your postal code     - wakes every ~30 min
+                - top birds near your postal code     - wakes once a day   
                 - AvianVisitors collage @ 800×480     - GET /frame.bin (ETag)
                 - dithered to the 6 inks, 4bpp packed - 304 → back to sleep
                                                       - 200 → draw, sleep
 ```
 
-The ESP32-S3 never decodes or dithers anything. It downloads a 192,000-byte framebuffer that is ready to push to the panel. The panel only refreshes when the bird set changes. The device sleeps through quiet hours (22:00–06:00 by default), which keeps battery use low.
+The ESP32-S3 never decodes or dithers anything. It downloads a 192,000-byte framebuffer that is ready to push to the panel. By default the frame wakes **once a day at 07:00** (`WAKE_TIMES`), redraws only if the birds changed, and deep-sleeps the rest of the time, so the 2,000 mAh battery should last many months. The server sets each wake time, which also corrects the ESP32's drifting sleep timer every day.
 
 ---
 
@@ -62,10 +62,12 @@ Then open these in a browser:
 |---|---|
 | `TITLE`, `SUBTITLE` | Frame text |
 | `BIRD_NAMES` | Whether bird names are shown |
+| `COUNT_EXP` | How much bird size follows detection count (default 0.6; 1.0 lets the loudest bird dominate) |
 | `SATURATION`, `CONTRAST` | Pushed up a bit by default, because Spectra inks are muted |
 | `BW_DAYS` | Lookback window in days |
+| `WAKE_TIMES` | Local times the frame wakes and redraws (default `07:00`; e.g. `07:00,17:00` for twice a day; empty = every `REFRESH_MIN`) |
 | `REFRESH_MIN` | How often the server re-checks BirdWeather |
-| `QUIET_START`, `QUIET_END` | Hours the device sleeps through |
+| `QUIET_START`, `QUIET_END` | Hours the device sleeps through (only when `WAKE_TIMES` is empty) |
 
 ## 2. Firmware (reTerminal E1002)
 
@@ -80,11 +82,11 @@ Then open these in a browser:
 
 **Behaviour**
 - **On power-up:** always draws.
-- **On timer wake:** draws only when the server's ETag has changed.
+- **Daily wake:** draws only when the server's ETag has changed, then sleeps until the next `WAKE_TIMES` slot.
 - **Green button (right, GPIO3):** wakes the device and redraws now. To get a fresh render first, hit `/refresh`, wait about 5 seconds, then press the button.
 - **LED:** on while awake.
 - **Logs:** go out on the USB-C serial port at 115200.
-- **Server unreachable:** keeps the last image and retries in 30 minutes.
+- **Server unreachable:** keeps the last image and retries after 1 h, then 2 h, 4 h … up to 24 h, so a dead server can't drain the battery.
 
 ## How it maps to the original
 
