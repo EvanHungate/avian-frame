@@ -71,6 +71,11 @@ CFG = {
     "headline_px": int(env("HEADLINE_PX", "30")),
     "eyebrow_px": int(env("EYEBROW_PX", "13")),
     "count_exp": float(env("COUNT_EXP", "0.6")),  # bird size vs detections; 1.0 = loudest dominates
+    # Illustration style: woodblock (built in), impressionist, audubon,
+    # bundle:<catalog id>, or the name of a generated set in STYLES_DIR
+    # (e.g. ghibli, linocut - see stylegen.py).
+    "style": env("STYLE", "woodblock"),
+    "styles_dir": env("STYLES_DIR", "/app/styles"),
     "port": int(env("PORT", "8088")),
     "data": env("DATA_DIR", "/data"),
 }
@@ -110,17 +115,136 @@ class State:
 S = State()
 
 
+# --- illustration styles -----------------------------------------------------
+BUNDLE_ALIASES = {
+    "impressionist": "official-western-us-impressionist",
+    "audubon": "official-birds-of-america",
+    "birds-of-america": "official-birds-of-america",
+}
+
+
+class Style:
+    """Where the collage gets its bird cutouts. The default (woodblock) uses the
+    illustrations baked into the upstream checkout."""
+    name = "woodblock"
+    drawable = None  # None = upstream's own drawable list
+
+    def shoot_kwargs(self):
+        return {}
+
+
+class LocalStyle(Style):
+    """A generated set: <dir>/<slug>.png (perched), <slug>-2.png (flight),
+    plus dims.json + masks.json from upstream build_masks.py."""
+
+    def __init__(self, name, directory):
+        self.name, self.dir = name, directory
+        for f in ("dims.json", "masks.json"):
+            if not os.path.isfile(os.path.join(directory, f)):
+                raise RuntimeError(f"style {name}: {f} missing in {directory}")
+        with open(os.path.join(directory, "dims.json")) as f:
+            dims = json.load(f)
+        self.drawable = frozenset(k[:-2] if k.endswith("-2") else k for k in dims)
+
+    def resolve(self, sci, pose):
+        slug = birdweather.slugify(sci) + ("-2" if pose == "flight" else "")
+        path = os.path.join(self.dir, slug + ".png")
+        if not os.path.isfile(path) and pose == "flight":  # fall back to the perched pose
+            path = os.path.join(self.dir, slug[:-2] + ".png")
+        return path if os.path.isfile(path) else None
+
+    def shoot_kwargs(self):
+        return {"cutout_resolver": self.resolve,
+                "dims_path": os.path.join(self.dir, "dims.json"),
+                "masks_path": os.path.join(self.dir, "masks.json")}
+
+
+class BundleStyle(Style):
+    """An official/community bundle from avianvisitors.com/bundles, downloaded
+    (only the birds this location hears) via upstream's verified bundle runtime."""
+
+    def __init__(self, name, bundle_id):
+        import bundle_runtime as br
+        self.name, self.bundle_id, self.br = name, bundle_id, br
+        self.root = os.path.join(CFG["data"], "bundles", bundle_id)
+        self.installed_for = None
+        self.active = None
+        self.pool = set()
+
+    def ensure(self, species_pool):
+        """(Re)install the bundle for these scientific names, at most once a day
+        unless new birds show up."""
+        pool = sorted({n for n in species_pool if self.br.SCI_RE.fullmatch(n)})
+        key = (dt.date.today().isoformat(), tuple(pool))
+        if self.active is not None and (self.installed_for == key or set(pool) <= self.pool):
+            return
+        basis = {"schema_version": 1, "species": pool,
+                 "basis_sha256": hashlib.sha256(json.dumps(pool).encode()).hexdigest()}
+        self.br._resolve_selection_basis = lambda _cfg: basis  # station list, not the BirdNET model
+        log.info("installing bundle %s for %d species", self.bundle_id, len(pool))
+        self.br.use(self.bundle_id, root=self.root, config={})
+        self.active = self.br.active_bundle(self.root)
+        self.installed_for, self.pool = key, set(pool)
+        log.info("bundle %s ready: %d drawable species", self.bundle_id, len(self.active.drawable_slugs))
+
+    @property
+    def drawable(self):
+        return None if self.active is None else self.active.drawable_slugs
+
+    def shoot_kwargs(self):
+        a = self.active
+        return {"cutout_resolver": a.resolve, "dims_path": a.dims_path,
+                "masks_path": a.masks_path, "bundle_assets": a.assets_response}
+
+
+def make_style(spec):
+    spec = (spec or "woodblock").strip()
+    if spec in ("", "woodblock", "default"):
+        return Style()
+    if spec.startswith("bundle:"):
+        return BundleStyle(spec, spec.split(":", 1)[1])
+    if spec in BUNDLE_ALIASES:
+        return BundleStyle(spec, BUNDLE_ALIASES[spec])
+    directory = spec if os.path.isabs(spec) else os.path.join(CFG["styles_dir"], spec)
+    return LocalStyle(os.path.basename(directory.rstrip("/")), directory)
+
+
+STYLE = None  # set in main()
+
+
 # --- birds -------------------------------------------------------------------
-def fetch_species():
+def species_pool():
+    """Everything the location heard over 30 days - used to pick which bundle
+    birds to download."""
     if CFG["station"]:
-        return birdweather.species_for_station(CFG["station"], target=CFG["target"], days=CFG["days"])
+        rows = birdweather.top_species_for_station(CFG["station"], days=30, limit=200)
+    else:
+        lat, lon = location()
+        rows = birdweather.top_species(lat, lon, 50, days=30, limit=200)
+    return [r["sci"] for r in rows]
+
+
+def location():
+    if CFG["lat"] and CFG["lon"]:
+        return float(CFG["lat"]), float(CFG["lon"])
+    return birdweather.geocode(CFG["zip"], CFG["country"])
+
+
+def fetch_species(style=None):
+    style = style or STYLE
+    if isinstance(style, BundleStyle):
+        style.ensure(species_pool())
+    drawable = {} if style is None or style.drawable is None else {"drawable": style.drawable}
+    if CFG["station"]:
+        return birdweather.species_for_station(CFG["station"], target=CFG["target"],
+                                               days=CFG["days"], **drawable)
     if CFG["lat"] and CFG["lon"]:
         lat, lon = float(CFG["lat"]), float(CFG["lon"])
         birdweather.geocode = lambda *a, **k: (lat, lon)
-        return birdweather.species_for_zip("latlon", target=CFG["target"], days=CFG["days"])
+        return birdweather.species_for_zip("latlon", target=CFG["target"], days=CFG["days"], **drawable)
     if CFG["zip"]:
         return birdweather.species_for_zip(CFG["zip"], country=CFG["country"],
-                                           target=CFG["target"], days=CFG["days"])
+                                           target=CFG["target"], days=CFG["days"], **drawable)
     raise RuntimeError("set BW_ZIP, BW_STATION_ID, or BW_LAT + BW_LON")
 
 
@@ -133,17 +257,20 @@ def _bucket(n):
 
 def signature(species):
     items = sorted((birdweather.slugify(s["sci"]), _bucket(int(s.get("n") or 1))) for s in species)
-    return hashlib.sha256(json.dumps([CFG["title"], CFG["subtitle"], items]).encode()).hexdigest()[:16]
+    style = STYLE.name if STYLE else ""
+    return hashlib.sha256(json.dumps([CFG["title"], CFG["subtitle"], style, items]).encode()).hexdigest()[:16]
 
 
 # --- image -------------------------------------------------------------------
-def render(species) -> Image.Image:
-    tmp = os.path.join(CFG["data"], "render.png")
+def render(species, style=None, out=None) -> Image.Image:
+    style = style or STYLE or Style()
+    tmp = out or os.path.join(CFG["data"], "render.png")
     shoot.shoot_birdweather(
         tmp, species, title=CFG["title"], subtitle=CFG["subtitle"],
         vw=W, vh=H, dsf=2, collage_vh=CFG["collage_vh"],
         headline_px=CFG["headline_px"], eyebrow_px=CFG["eyebrow_px"],
         bird_names=CFG["bird_names"], count_exp=CFG["count_exp"], timeout_ms=120_000,
+        **style.shoot_kwargs(),
     )
     img = Image.open(tmp).convert("RGB")
     return img.resize((W, H), Image.LANCZOS)
@@ -303,8 +430,15 @@ class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
 
 
 def main():
+    global STYLE
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     os.makedirs(CFG["data"], exist_ok=True)
+    try:
+        STYLE = make_style(CFG["style"])
+    except Exception:
+        log.exception("style %r unavailable; using the built-in woodblock set", CFG["style"])
+        STYLE = Style()
+    log.info("illustration style: %s", STYLE.name)
     # Serve the last frame immediately after a restart
     try:
         with open(os.path.join(CFG["data"], "frame.bin"), "rb") as f:

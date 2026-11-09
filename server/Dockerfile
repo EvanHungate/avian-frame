@@ -11,9 +11,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends git tzdata \
  && pip install --no-cache-dir -r /opt/AvianVisitors/frame/requirements-shoot.txt numpy \
  && playwright install --with-deps chromium
 
-COPY render_server.py /app/render_server.py
+COPY render_server.py stylegen.py preview_styles.py /app/
+COPY styles /app/styles
 WORKDIR /app
-ENV AV_FRAME_DIR=/opt/AvianVisitors/frame DATA_DIR=/data PYTHONUNBUFFERED=1
+ENV AV_FRAME_DIR=/opt/AvianVisitors/frame AV_ROOT=/opt/AvianVisitors DATA_DIR=/data STYLES_DIR=/app/styles PYTHONUNBUFFERED=1
 VOLUME /data
 EXPOSE 8088
 HEALTHCHECK --interval=5m --timeout=10s --start-period=2m \

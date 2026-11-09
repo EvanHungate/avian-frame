@@ -24,6 +24,7 @@ services:
       TITLE: "55 Parkway"          # small line on top
       SUBTITLE: "Avian Visitors"   # big headline
       BIRD_NAMES: "1"
+      STYLE: "woodblock"       # woodblock | impressionist | audubon | ghibli | linocut (see previews/)
       SATURATION: "1.35"       # push colour a bit; Spectra 6 inks are muted
       CONTRAST: "1.1"
       # --- cadence -----------------------------------------------------------
