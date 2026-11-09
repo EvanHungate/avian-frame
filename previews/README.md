@@ -10,7 +10,7 @@ Live birds from the configured station, rendered in each style. Left: full colou
 
 ## Not rendered
 
-- **impressionist**: not rendered (BundleError: catalog-v1.json is unsafe)
-- **audubon**: not rendered (BundleError: catalog-v1.json is unsafe)
+- **impressionist**: not rendered (RuntimeError: frame labels missing for: Bombycilla cedrorum)
+- **audubon**: not rendered (RuntimeError: frame labels missing for: Regulus satrapa, Haemorhous mexicanus)
 - **ghibli**: not rendered (RuntimeError: style ghibli: dims.json missing in /home/runner/work/avian-frame/avian-frame/server/styles/ghibli)
 - **linocut**: not rendered (RuntimeError: style linocut: dims.json missing in /home/runner/work/avian-frame/avian-frame/server/styles/linocut)
