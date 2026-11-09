@@ -1,0 +1,4 @@
+firmware/AvianFrame/config.h
+firmware/.pio/
+server/data/
+__pycache__/
