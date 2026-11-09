@@ -4,7 +4,9 @@
  * Wake -> Wi-Fi -> GET http://<server>/frame.bin (If-None-Match: last ETag)
  *   200: push the 4bpp framebuffer to the panel, refresh, remember the ETag
  *   304: birds haven't changed, leave the panel alone
- * -> deep sleep for X-Sleep-Seconds (server decides; longer overnight).
+ * -> deep sleep for X-Sleep-Seconds (server decides; once a day by default).
+ * If the server or Wi-Fi is down it backs off (1 h, 2 h, 4 h ... up to 24 h)
+ * so a dead server can't drain the battery.
  *
  * Green button (right, KEY0/GPIO3): wake and redraw now.
  *
@@ -72,7 +74,7 @@ static bool connectWifi() {
 
 static void deepSleep(uint32_t seconds) {
   if (seconds < 60) seconds = 60;
-  if (seconds > 12 * 3600) seconds = 12 * 3600;
+  if (seconds > 30 * 3600) seconds = 30 * 3600;
   for (int i = 0; i < 300 && digitalRead(PIN_KEY_GREEN) == LOW; ++i) delay(10);  // wait for release
   LOG.printf("[sleep] %lu s\n", (unsigned long)seconds);
   LOG.flush();
@@ -83,6 +85,14 @@ static void deepSleep(uint32_t seconds) {
   // Board has external pull-ups on the keys, so ANY_LOW works in deep sleep.
   esp_sleep_enable_ext1_wakeup(1ULL << PIN_KEY_GREEN, ESP_EXT1_WAKEUP_ANY_LOW);
   esp_deep_sleep_start();
+}
+
+// Retry delay after a failure: FALLBACK_SLEEP_S doubled per consecutive
+// failure, capped at a day.
+static uint32_t backoff() {
+  uint32_t s = FALLBACK_SLEEP_S;
+  for (uint8_t i = 1; i < g_fails && s < 24 * 3600; ++i) s *= 2;
+  return s > 24 * 3600 ? 24 * 3600 : s;
 }
 
 // Returns seconds to sleep.
@@ -107,11 +117,11 @@ static uint32_t fetchAndDraw(bool force, float vbat) {
     LOG.printf("[http] unexpected response (size %d)\n", http.getSize());
     http.end();
     g_fails++;
-    return FALLBACK_SLEEP_S;
+    return backoff();
   }
 
   uint8_t* fb = (uint8_t*)ps_malloc(FB_BYTES);
-  if (!fb) { LOG.println("[mem] ps_malloc failed -- is PSRAM enabled?"); http.end(); return FALLBACK_SLEEP_S; }
+  if (!fb) { LOG.println("[mem] ps_malloc failed -- is PSRAM enabled?"); http.end(); g_fails++; return backoff(); }
 
   WiFiClient* s = http.getStreamPtr();
   size_t got = 0;
@@ -134,7 +144,7 @@ static uint32_t fetchAndDraw(bool force, float vbat) {
     LOG.printf("[http] short read %u/%u\n", (unsigned)got, (unsigned)FB_BYTES);
     free(fb);
     g_fails++;
-    return FALLBACK_SLEEP_S;
+    return backoff();
   }
 
   LOG.println("[epd] drawing");
@@ -168,7 +178,7 @@ void setup() {
   if (!connectWifi()) {
     LOG.println("[wifi] failed");
     g_fails++;
-    deepSleep(g_fails > 3 ? FALLBACK_SLEEP_S * 2 : FALLBACK_SLEEP_S);
+    deepSleep(backoff());
   }
   // Cold boot or button press: always redraw, even if the ETag matches.
   deepSleep(fetchAndDraw(button || cold, vbat));
