@@ -27,8 +27,8 @@ jobs:
       TITLE: "55 Parkway"
       SUBTITLE: "Avian Visitors"
       TZ: America/Toronto
-      AV_ROOT: /opt/AvianVisitors
-      AV_FRAME_DIR: /opt/AvianVisitors/frame
+      AV_ROOT: /home/runner/AvianVisitors
+      AV_FRAME_DIR: /home/runner/AvianVisitors/frame
       STYLES_DIR: ${{ github.workspace }}/server/styles
       DATA_DIR: /tmp/avian-preview
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
@@ -40,8 +40,8 @@ jobs:
           python-version: "3.12"
       - name: Upstream AvianVisitors + render deps
         run: |
-          sudo git clone --depth 1 --branch avian-visitors https://github.com/Twarner491/AvianVisitors.git $AV_ROOT
-          sudo chown -R "$USER" $AV_ROOT
+          git clone --depth 1 --branch avian-visitors https://github.com/Twarner491/AvianVisitors.git $AV_ROOT
+          chmod -R go-w $AV_ROOT   # upstream's bundle runtime refuses group/world-writable files
           pip install -r $AV_FRAME_DIR/requirements-shoot.txt numpy
           python -m playwright install --with-deps chromium
       - name: Generate custom styles (Gemini)
