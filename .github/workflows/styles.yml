@@ -5,14 +5,15 @@
 name: styles
 
 on:
+  # Manual only, so editing this repo never spends image-generation credits.
   workflow_dispatch:
     inputs:
       generate:
-        description: "Custom styles to generate with Gemini (space-separated; needs GEMINI_API_KEY secret)"
-        default: "ghibli linocut"
-  push:
-    branches: [main]
-    paths: ["server/preview_styles.py", "server/stylegen.py", "server/styles/*.prompt.md", ".github/workflows/styles.yml"]
+        description: "Custom styles to generate (space-separated, e.g. ghibli linocut). Needs a KIE_API_KEY or GEMINI_API_KEY secret."
+        default: "ghibli"
+      limit:
+        description: "How many of the station's top birds to generate (2 images each)"
+        default: "5"
 
 concurrency:
   group: styles
@@ -37,7 +38,8 @@ jobs:
       DATA_DIR: /tmp/avian-preview
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       KIE_API_KEY: ${{ secrets.KIE_API_KEY }}
-      GENERATE: ${{ github.event.inputs.generate || 'ghibli linocut' }}
+      GENERATE: ${{ github.event.inputs.generate }}
+      LIMIT: ${{ github.event.inputs.limit || '5' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -54,7 +56,7 @@ jobs:
         run: |
           pip install -r $AV_ROOT/avian/scripts/requirements.txt
           for s in $GENERATE; do
-            python server/stylegen.py --style "$s" --station "$BW_STATION_ID" --limit 24 || echo "::warning::$s generation failed"
+            python server/stylegen.py --style "$s" --station "$BW_STATION_ID" --limit "$LIMIT" || echo "::warning::$s generation failed"
           done
       - name: No image-generation key
         if: env.KIE_API_KEY == '' && env.GEMINI_API_KEY == ''
