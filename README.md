@@ -69,6 +69,26 @@ Then open these in a browser:
 | `REFRESH_MIN` | How often the server re-checks BirdWeather |
 | `QUIET_START`, `QUIET_END` | Hours the device sleeps through (only when `WAKE_TIMES` is empty) |
 
+### Illustration styles
+
+Set `STYLE` to choose the art. See `previews/` for the same birds in each style.
+
+| `STYLE` | What it is | Source |
+|---|---|---|
+| `woodblock` (default) | Japanese kachō-e woodblock | Built into the image |
+| `impressionist` | Loose, energetic gesture sketches | Official bundle, downloaded on first use |
+| `audubon` | Audubon's *Birds of America* plates, with their branches and flowers | Official bundle (public domain), downloaded on first use |
+| `ghibli` | Soft hand-painted animated-film look | Generated for your birds with Gemini |
+| `linocut` | Bold carved print in the panel's own six inks | Generated for your birds with Gemini |
+
+Bundle styles only download the birds your station has heard in the last 30 days.
+
+The generated styles need a paid Google Gemini API key (about 2 images per bird). To make them:
+1. Add the key as the `GEMINI_API_KEY` repo secret (**Settings → Secrets and variables → Actions**).
+2. Run the **styles** workflow from the **Actions** tab.
+
+The workflow generates the cutouts into `server/styles/<name>/` and renders the previews. It also rebuilds the image so the new style is baked in. You can also run `python3 server/stylegen.py --style ghibli --station 10393` yourself. To add a new style, add a prompt in `server/styles/<name>.prompt.md`.
+
 ## 2. Firmware (reTerminal E1002)
 
 **Arduino IDE**
