@@ -10,6 +10,10 @@
  *
  * Green button (right, KEY0/GPIO3): wake and redraw now.
  *
+ * Low battery: below LOW_BATT_V (~10 %) a small battery icon is drawn in the
+ * bottom-right corner. Crossing the threshold forces one redraw so the icon
+ * appears (or disappears after charging) even if the birds haven't changed.
+ *
  * Arduino IDE setup:
  *   Board:  "XIAO_ESP32S3" (esp32 by Espressif)
  *   PSRAM:  "OPI PSRAM"   <-- required, the frame buffer lives in PSRAM
@@ -38,6 +42,15 @@ static constexpr int PIN_DBG_RX    = 44;
 static constexpr int PIN_DBG_TX    = 43;
 #define LOG Serial1
 
+// Single-cell LiPo, read at rest: ~3.60 V is roughly 10 % left. The icon
+// clears again once the battery is back above OK_BATT_V (i.e. after charging).
+#ifndef LOW_BATT_V
+#define LOW_BATT_V 3.60f
+#endif
+#ifndef OK_BATT_V
+#define OK_BATT_V  3.85f
+#endif
+
 static constexpr int    FB_W = 800, FB_H = 480;
 static constexpr size_t FB_BYTES = FB_W * FB_H / 2;   // 4bpp = 192000
 
@@ -45,6 +58,7 @@ static constexpr size_t FB_BYTES = FB_W * FB_H / 2;   // 4bpp = 192000
 RTC_DATA_ATTR char     g_etag[48] = "";
 RTC_DATA_ATTR uint32_t g_boots = 0;
 RTC_DATA_ATTR uint8_t  g_fails = 0;
+RTC_DATA_ATTR bool     g_lowShown = false;   // is the icon on the panel right now?
 
 EPaper epaper;
 
@@ -87,6 +101,18 @@ static void deepSleep(uint32_t seconds) {
   esp_deep_sleep_start();
 }
 
+// Small low-battery icon in the bottom-right corner: white backing so it reads
+// over any bird, black outline, one red bar for "nearly empty". ~34x18 px.
+static void drawLowBattery() {
+  const int w = 26, h = 14, nub = 3;
+  const int x = FB_W - w - nub - 10, y = FB_H - h - 10;
+  epaper.fillRect(x - 3, y - 3, w + nub + 6, h + 6, TFT_WHITE);
+  epaper.drawRect(x, y, w, h, TFT_BLACK);
+  epaper.drawRect(x + 1, y + 1, w - 2, h - 2, TFT_BLACK);   // 2 px outline
+  epaper.fillRect(x + w, y + 4, nub, h - 8, TFT_BLACK);     // terminal
+  epaper.fillRect(x + 3, y + 3, 5, h - 6, TFT_RED);         // last bar
+}
+
 // Retry delay after a failure: FALLBACK_SLEEP_S doubled per consecutive
 // failure, capped at a day.
 static uint32_t backoff() {
@@ -96,7 +122,7 @@ static uint32_t backoff() {
 }
 
 // Returns seconds to sleep.
-static uint32_t fetchAndDraw(bool force, float vbat) {
+static uint32_t fetchAndDraw(bool force, float vbat, bool lowBatt) {
   HTTPClient http;
   String url = String(SERVER_URL) + "/frame.bin?batt=" + String(vbat, 2) +
                "&rssi=" + String(WiFi.RSSI()) + "&boot=" + String(g_boots);
@@ -151,12 +177,14 @@ static uint32_t fetchAndDraw(bool force, float vbat) {
   const uint32_t t0 = millis();
   epaper.begin();
   epaper.pushImage(0, 0, FB_W, FB_H, (uint16_t*)fb);
+  if (lowBatt) drawLowBattery();
   epaper.update();
   epaper.sleep();
   free(fb);
   LOG.printf("[epd] done in %lums\n", millis() - t0);
 
   strlcpy(g_etag, etag.c_str(), sizeof(g_etag));
+  g_lowShown = lowBatt;
   g_fails = 0;
   return sleepS;
 }
@@ -180,8 +208,16 @@ void setup() {
     g_fails++;
     deepSleep(backoff());
   }
-  // Cold boot or button press: always redraw, even if the ETag matches.
-  deepSleep(fetchAndDraw(button || cold, vbat));
+  // Hysteresis so a battery hovering at the threshold doesn't flip the icon
+  // (and burn a refresh) every day. A reading near 0 V means no battery fitted.
+  bool lowBatt = g_lowShown;
+  if (vbat > 1.0f && vbat < LOW_BATT_V) lowBatt = true;
+  if (vbat > OK_BATT_V) lowBatt = false;
+  const bool iconChange = lowBatt != g_lowShown;
+  if (iconChange) LOG.printf("[batt] low-battery icon %s\n", lowBatt ? "on" : "off");
+
+  // Cold boot, button press, or icon change: redraw even if the ETag matches.
+  deepSleep(fetchAndDraw(button || cold || iconChange, vbat, lowBatt));
 }
 
 void loop() {}
