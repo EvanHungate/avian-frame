@@ -1,0 +1,32 @@
+services:
+  avian-frame:
+    # Pre-built image from GitHub (see README). Built by GitHub Actions in EvanHungate/avian-frame. Or
+    # delete the image line and keep "build: ." to build it locally instead.
+    image: ghcr.io/evanhungate/avian-frame:latest
+    build: .
+    container_name: avian-frame
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./data:/data
+    environment:
+      TZ: America/Toronto
+      # --- where the birds come from (pick ONE) -----------------------------
+      BW_STATION_ID: "10393"   # https://app.birdweather.com/stations/10393
+      # BW_ZIP: "N2L"          # or birds near a postal code (Canada: first 3 chars)
+      # BW_COUNTRY: "ca"
+      # BW_LAT: "43.47"        # or give coordinates directly
+      # BW_LON: "-80.54"
+      BW_DAYS: "7"             # lookback window
+      MAX_BIRDS: "12"
+      # --- look --------------------------------------------------------------
+      TITLE: "55 Parkway"          # small line on top
+      SUBTITLE: "Avian Visitors"   # big headline
+      BIRD_NAMES: "1"
+      SATURATION: "1.35"       # push colour a bit; Spectra 6 inks are muted
+      CONTRAST: "1.1"
+      # --- cadence -----------------------------------------------------------
+      REFRESH_MIN: "30"        # how often to re-check BirdWeather
+      QUIET_START: "22"        # device sleeps 22:00-06:00 (set both 0 to disable)
+      QUIET_END: "6"
