@@ -84,6 +84,7 @@ Then open these in a browser:
 - **On power-up:** always draws.
 - **Daily wake:** draws only when the server's ETag has changed, then sleeps until the next `WAKE_TIMES` slot.
 - **Green button (right, GPIO3):** wakes the device and redraws now. To get a fresh render first, hit `/refresh`, wait about 5 seconds, then press the button.
+- **Low battery:** below about 10 % (3.60 V) a small battery icon with a red bar appears in the bottom-right corner. It clears after charging (above 3.85 V). Tune with `LOW_BATT_V` / `OK_BATT_V` in `config.h`.
 - **LED:** on while awake.
 - **Logs:** go out on the USB-C serial port at 115200.
 - **Server unreachable:** keeps the last image and retries after 1 h, then 2 h, 4 h … up to 24 h, so a dead server can't drain the battery.
