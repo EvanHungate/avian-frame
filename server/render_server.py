@@ -55,8 +55,8 @@ CFG = {
     "lat": env("BW_LAT"), "lon": env("BW_LON"),  # or skip the geocoder entirely
     "days": int(env("BW_DAYS", "7")),
     "target": int(env("MAX_BIRDS", "12")),
-    "title": env("TITLE", "Avian Visitors"),
-    "subtitle": env("SUBTITLE", "Heard This Week"),
+    "title": env("TITLE", "Heard This Week"),     # small line on top
+    "subtitle": env("SUBTITLE", "Avian Visitors"),  # big headline
     "bird_names": env("BIRD_NAMES", "1") not in ("0", "false", "no", "off"),
     "refresh_min": int(env("REFRESH_MIN", "30")),
     # Daily mode: the device wakes only at these local times (comma-separated).

@@ -29,8 +29,6 @@ jobs:
     timeout-minutes: 60
     env:
       BW_STATION_ID: "10393"
-      TITLE: "55 Parkway"
-      SUBTITLE: "Avian Visitors"
       TZ: America/Toronto
       AV_ROOT: /home/runner/AvianVisitors
       AV_FRAME_DIR: /home/runner/AvianVisitors/frame

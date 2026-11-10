@@ -1,0 +1,103 @@
+# Builds the frame firmware on every change (so a typo never reaches the
+# device), and - when run by hand with "release" ticked - publishes it so
+# frames install it over Wi-Fi on their next wake.
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    paths: ["firmware/**", ".github/workflows/firmware.yml"]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Publish this build to the frame(s) over Wi-Fi"
+        type: boolean
+        default: false
+
+concurrency:
+  group: firmware
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  ESP32_CORE: "3.0.7"
+  FQBN: esp32:esp32:XIAO_ESP32S3:PSRAM=opi
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Core + libraries
+        run: |
+          arduino-cli config init --overwrite
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli config set library.enable_unsafe_install true
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32@$ESP32_CORE
+          arduino-cli lib install --git-url https://github.com/Seeed-Studio/Seeed_GFX.git
+          arduino-cli lib install "WiFiManager@2.0.17"
+          arduino-cli board details -b esp32:esp32:XIAO_ESP32S3 | grep -iE "partition|psram" || true
+      - name: Certificates still match the site
+        run: |
+          python3 firmware/tools/make_ca_roots.py --pem /tmp/roots.pem
+          host="${GITHUB_REPOSITORY_OWNER,,}.github.io"
+          echo | openssl s_client -connect "$host:443" -servername "$host" -CAfile /tmp/roots.pem \
+            -verify_return_error 2>&1 | grep -E "Verify return code|issuer="
+          echo | openssl s_client -connect hc-ping.com:443 -servername hc-ping.com -CAfile /tmp/roots.pem \
+            -verify_return_error 2>&1 | grep -E "Verify return code"
+      - name: Version
+        id: v
+        run: |
+          if [ "${{ inputs.release }}" = "true" ]; then v=${{ github.run_number }}; else v=0; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          {
+            echo "#define FW_VERSION $v"
+            if [ -n "$HC_URL" ]; then echo "#define HC_URL \"$HC_URL\""; fi
+          } > firmware/AvianFrame/build_secrets.h
+          sed 's#hc-ping.com/.*#hc-ping.com/<secret>"#' firmware/AvianFrame/build_secrets.h
+        env:
+          HC_URL: ${{ secrets.HC_PING_URL }}
+      - name: Compile
+        run: |
+          arduino-cli compile -b "$FQBN" --export-binaries --warnings default firmware/AvianFrame
+          ls -la firmware/AvianFrame/build/*/
+      - name: Package
+        run: |
+          d=$(ls -d firmware/AvianFrame/build/*/)
+          mkdir -p out
+          cp "$d/AvianFrame.ino.bin" out/firmware.bin
+          cp "$d/AvianFrame.ino.merged.bin" out/firmware-full.bin
+          echo "${{ steps.v.outputs.version }}" > out/version.txt
+      - name: Commit regenerated certificates
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git add firmware/AvianFrame/ca_roots.h
+          git diff --cached --quiet && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git commit -m "Update ca_roots.h"
+          git pull --rebase
+          git push
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-v${{ steps.v.outputs.version }}
+          path: out/
+      - name: Release to the frames
+        if: inputs.release
+        run: |
+          mkdir -p firmware/release
+          cp out/* firmware/release/
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add firmware/release
+          git commit -m "Firmware v${{ steps.v.outputs.version }}"
+          git pull --rebase
+          git push
+          gh workflow run publish.yml
+        env:
+          GH_TOKEN: ${{ github.token }}

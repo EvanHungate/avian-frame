@@ -52,7 +52,7 @@ jobs:
           IMG="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/avian-frame:${GITHUB_SHA}"
           echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           docker run -d --name af -p 8088:8088 -e TZ=America/Toronto \
-            -e BW_STATION_ID=10393 -e TITLE="55 Parkway" -e SUBTITLE="Avian Visitors" "$IMG"
+            -e BW_STATION_ID=10393 "$IMG"
           for i in $(seq 1 60); do
             curl -sf -o frame.bin http://127.0.0.1:8088/frame.bin && break
             sleep 5

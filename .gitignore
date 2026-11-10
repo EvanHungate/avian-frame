@@ -1,4 +1,5 @@
-firmware/AvianFrame/config.h
+firmware/AvianFrame/build_secrets.h
+firmware/AvianFrame/build/
 firmware/.pio/
 server/data/
 __pycache__/
