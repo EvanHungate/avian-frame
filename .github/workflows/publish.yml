@@ -63,11 +63,15 @@ jobs:
           touch site/.nojekyll
           ls -la site
           cat site/meta.txt
+      # One artifact name per attempt, so "Re-run" doesn't find two and fail.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+          name: github-pages-${{ github.run_attempt }}
       - id: deploy
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
       - name: Keep the daily schedule alive
         # GitHub pauses scheduled workflows after 60 days without repo activity;
         # re-enabling them each run resets that.
