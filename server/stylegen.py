@@ -3,7 +3,7 @@
 
 Uses the upstream AvianVisitors pipeline pieces:
   Wikipedia photo (anatomy reference) -> Gemini image model with a style prompt
-  -> rembg/BiRefNet cutout -> build_masks.py (dims.json + masks.json)
+  -> cream-ground cutout -> build_masks.py (dims.json + masks.json)
 
     GEMINI_API_KEY=... python3 stylegen.py --style ghibli --station 10393
     KIE_API_KEY=...    python3 stylegen.py --style ghibli --station 10393   # via kie.ai
@@ -89,6 +89,35 @@ def kie_generate(key, prompt, ref_url, timeout=300):
     raise RuntimeError("kie.ai task timed out")
 
 
+def cut_out(path, tol=26, margin=0.03):
+    """Remove the flat cream ground the prompt asks for. Flood-fills from the
+    border (so cream-coloured feathers inside the bird survive), feathers the
+    edge, crops to the bird, and shrinks to MAX_SIDE. No ML model, so it runs
+    anywhere - BiRefNet needs more RAM than a GitHub runner has."""
+    from PIL import Image, ImageChops, ImageDraw, ImageFilter
+    im = Image.open(path).convert("RGB")
+    if max(im.size) > 1024:
+        im.thumbnail((1024, 1024), Image.LANCZOS)
+    w, h = im.size
+    marker = (255, 0, 255)
+    work = im.copy()
+    seeds = [(x, y) for x in (0, w // 2, w - 1) for y in (0, h // 2, h - 1) if (x, y) != (w // 2, h // 2)]
+    for xy in seeds:
+        if work.getpixel(xy) != marker:
+            ImageDraw.floodfill(work, xy, marker, thresh=tol)
+    bg = ImageChops.difference(work, Image.new("RGB", (w, h), marker)).convert("L").point(lambda v: 255 if v < 8 else 0)
+    alpha = bg.point(lambda v: 255 - v).filter(ImageFilter.MinFilter(3)).filter(ImageFilter.GaussianBlur(1.2))
+    rgba = im.copy()
+    rgba.putalpha(alpha)
+    box = alpha.point(lambda v: 255 if v > 24 else 0).getbbox()
+    if not box:
+        raise RuntimeError(f"{path.name}: nothing left after removing the background")
+    m = int(max(box[2] - box[0], box[3] - box[1]) * margin)
+    rgba = rgba.crop((max(0, box[0] - m), max(0, box[1] - m), min(w, box[2] + m), min(h, box[3] + m)))
+    rgba.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
+    rgba.save(path, optimize=True)
+
+
 def fill(prompt, sci, com, pose):
     return (prompt.replace("{sci_name}", sci).replace("{com_name}", com)
             .replace("{pose}", pregen.POSES[pose]).replace("{anti_ref_line}", ""))
@@ -110,8 +139,6 @@ def main():
     ap.add_argument("--limit", type=int, default=24, help="max species (by detections)")
     ap.add_argument("--out", type=Path, help="default: styles/<style>")
     ap.add_argument("--sleep", type=float, default=6.0, help="seconds between Gemini calls")
-    ap.add_argument("--cutout-model", default="birefnet-general-lite",
-                    help="rembg model (full birefnet-general needs >7 GB RAM)")
     a = ap.parse_args()
     kie_key = os.environ.get("KIE_API_KEY", "")
     key = os.environ.get("GEMINI_API_KEY", "")
@@ -151,16 +178,10 @@ def main():
             time.sleep(a.sleep)
 
     if made:
-        # shrink first: smaller inputs keep the matting model's memory in check
+        print(f"cutting out {len(made)} images ...", flush=True)
         for name in made:
-            p = out / f"{name}.png"
-            im = Image.open(p).convert("RGB")
-            if max(im.size) > MAX_SIDE:
-                im.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
-            im.save(p, optimize=True)
-        print(f"cutting out {len(made)} images ({a.cutout_model}) ...", flush=True)
-        subprocess.run([sys.executable, str(AV / "avian/scripts/cutout.py"), "--dir", str(out),
-                        "--model", a.cutout_model, *made], check=True)
+            cut_out(out / f"{name}.png")
+            print(f"  cut  {name}", flush=True)
     subprocess.run([sys.executable, str(AV / "avian/scripts/build_masks.py"),
                     "--illustrations", str(out), "--frontend", str(out)], check=True)
     print(f"done: {len(made)} new, {len(failed)} failed -> {out}")
