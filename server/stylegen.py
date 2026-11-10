@@ -110,6 +110,8 @@ def main():
     ap.add_argument("--limit", type=int, default=24, help="max species (by detections)")
     ap.add_argument("--out", type=Path, help="default: styles/<style>")
     ap.add_argument("--sleep", type=float, default=6.0, help="seconds between Gemini calls")
+    ap.add_argument("--cutout-model", default="birefnet-general-lite",
+                    help="rembg model (full birefnet-general needs >7 GB RAM)")
     a = ap.parse_args()
     kie_key = os.environ.get("KIE_API_KEY", "")
     key = os.environ.get("GEMINI_API_KEY", "")
@@ -142,21 +144,23 @@ def main():
                     raw = pregen.gen_one(key, prompt, sci, com, pose, positive_ref=ref)
                 path.write_bytes(raw)
                 made.append(name)
-                print(f"  ok   {name}")
+                print(f"  ok   {name}", flush=True)
             except Exception as e:  # keep going; a missing pose falls back to perched
                 failed.append(name)
                 print(f"  FAIL {name}: {e}", file=sys.stderr)
             time.sleep(a.sleep)
 
     if made:
-        print(f"cutting out {len(made)} images ...")
-        subprocess.run([sys.executable, str(AV / "avian/scripts/cutout.py"), "--dir", str(out), *made], check=True)
+        # shrink first: smaller inputs keep the matting model's memory in check
         for name in made:
             p = out / f"{name}.png"
-            im = Image.open(p)
+            im = Image.open(p).convert("RGB")
             if max(im.size) > MAX_SIDE:
                 im.thumbnail((MAX_SIDE, MAX_SIDE), Image.LANCZOS)
-                im.save(p, optimize=True)
+            im.save(p, optimize=True)
+        print(f"cutting out {len(made)} images ({a.cutout_model}) ...", flush=True)
+        subprocess.run([sys.executable, str(AV / "avian/scripts/cutout.py"), "--dir", str(out),
+                        "--model", a.cutout_model, *made], check=True)
     subprocess.run([sys.executable, str(AV / "avian/scripts/build_masks.py"),
                     "--illustrations", str(out), "--frontend", str(out)], check=True)
     print(f"done: {len(made)} new, {len(failed)} failed -> {out}")
