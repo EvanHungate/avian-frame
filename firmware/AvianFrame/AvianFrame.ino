@@ -66,6 +66,9 @@ WiFiClientSecure tls;
 
 // Keep a freshly installed firmware "on probation": if it crashes before it
 // first reaches deep sleep, the bootloader goes back to the previous one.
+// Declared up here so the Arduino-generated prototypes can see it.
+struct Meta { String frame, wake, tz; long fw = 0; };
+
 extern "C" bool verifyRollbackLater() { return true; }
 
 static void epBegin() {
@@ -175,7 +178,8 @@ static void runSetup(WiFiManager& wm) {
   wm.setConfigPortalTimeout(PORTAL_TIMEOUT_S);
   wm.setConnectTimeout(30);
   wm.setTitle("Avian Visitors");
-  wm.setMenu(std::vector<const char*>{"wifi", "exit"});
+  static std::vector<const char*> menu = {"wifi", "exit"};
+  wm.setMenu(menu);
   digitalWrite(PIN_LED, LOW);
   if (!wm.startConfigPortal(SETUP_AP_NAME)) {
     LOG.println("[wifi] setup timed out");
@@ -251,7 +255,6 @@ static int get(HTTPClient& http, const String& url) {
   return code;
 }
 
-struct Meta { String frame, wake, tz; long fw = 0; };
 
 static bool fetchMeta(Meta& m) {
   HTTPClient http;
