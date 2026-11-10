@@ -34,8 +34,8 @@ jobs:
       STYLE: ${{ vars.STYLE || 'woodblock' }}
       WAKE_TIMES: ${{ vars.WAKE_TIMES || '07:00' }}
       TZ: ${{ vars.FRAME_TZ || 'America/Toronto' }}
-      TITLE: ${{ vars.TITLE || 'Heard This Week' }}
-      SUBTITLE: ${{ vars.SUBTITLE || 'Avian Visitors' }}
+      TITLE: ${{ vars.TITLE || '{date}' }}
+      SUBTITLE: ${{ vars.SUBTITLE || 'Avian Visitors This Week' }}
       FRAME_REV: ${{ vars.FRAME_REV }}
       STAMP: ${{ vars.STAMP || '1' }}   # 'updated ...' label on the image; set var STAMP=0 to hide
       AV_ROOT: /home/runner/AvianVisitors

@@ -47,7 +47,7 @@ The workflow keeps its own schedule switched on. Normally GitHub pauses schedule
 | `STYLE` | `woodblock` | Illustration set (see below) |
 | `WAKE_TIMES` | `07:00` | Local times the frame wakes, e.g. `07:00,17:00` |
 | `FRAME_TZ` | `America/Toronto` | The frame's time zone (IANA name) |
-| `TITLE` / `SUBTITLE` | `Heard This Week` / `Avian Visitors` | Small line / headline |
+| `TITLE` / `SUBTITLE` | `{date}` / `Avian Visitors This Week` | Small line / headline; `{date}` becomes e.g. Tuesday November 10 2026 |
 | `FRAME_REV` | | Change it to any new value to force every frame to redraw |
 
 ### 2. Flash the frame once over USB

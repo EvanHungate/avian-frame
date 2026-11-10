@@ -55,8 +55,8 @@ CFG = {
     "lat": env("BW_LAT"), "lon": env("BW_LON"),  # or skip the geocoder entirely
     "days": int(env("BW_DAYS", "7")),
     "target": int(env("MAX_BIRDS", "12")),
-    "title": env("TITLE", "Heard This Week"),     # small line on top
-    "subtitle": env("SUBTITLE", "Avian Visitors"),  # big headline
+    "title": env("TITLE", "{date}"),              # small line on top; {date} = Tuesday November 10 2026
+    "subtitle": env("SUBTITLE", "Avian Visitors This Week"),  # big headline
     "bird_names": env("BIRD_NAMES", "1") not in ("0", "false", "no", "off"),
     "refresh_min": int(env("REFRESH_MIN", "30")),
     # Daily mode: the device wakes only at these local times (comma-separated).
@@ -255,10 +255,15 @@ def _bucket(n):
     return 8
 
 
+def _text(s):
+    """Fill {date} in a title with today's local date, e.g. Tuesday November 10 2026."""
+    return s.replace("{date}", dt.datetime.now(CFG["tz"]).strftime("%A %B %-d %Y"))
+
+
 def signature(species):
     items = sorted((birdweather.slugify(s["sci"]), _bucket(int(s.get("n") or 1))) for s in species)
     style = STYLE.name if STYLE else ""
-    return hashlib.sha256(json.dumps([CFG["title"], CFG["subtitle"], style, items]).encode()).hexdigest()[:16]
+    return hashlib.sha256(json.dumps([_text(CFG["title"]), _text(CFG["subtitle"]), style, items]).encode()).hexdigest()[:16]
 
 
 # --- image -------------------------------------------------------------------
@@ -274,7 +279,7 @@ def render(species, style=None, out=None) -> Image.Image:
     for i, extra in enumerate(attempts):
         try:
             shoot.shoot_birdweather(
-                tmp, species, title=CFG["title"], subtitle=CFG["subtitle"],
+                tmp, species, title=_text(CFG["title"]), subtitle=_text(CFG["subtitle"]),
                 vw=W, vh=H, dsf=2, collage_vh=CFG["collage_vh"],
                 headline_px=CFG["headline_px"], eyebrow_px=CFG["eyebrow_px"],
                 count_exp=CFG["count_exp"], timeout_ms=120_000,
