@@ -20,7 +20,8 @@ Live birds from the configured station, rendered in each style. Left: full colou
 
 <img src="audubon.png" width="49%"> <img src="audubon-eink.png" width="49%">
 
-## Not rendered
+## Ghibli-style (generated)  (`STYLE=ghibli`)
 
-- **ghibli**: not rendered (RuntimeError: style ghibli: dims.json missing in /home/runner/work/avian-frame/avian-frame/server/styles/ghibli)
-- **linocut**: not rendered (RuntimeError: style linocut: dims.json missing in /home/runner/work/avian-frame/avian-frame/server/styles/linocut)
+4 birds: House Sparrow, Red-bellied Woodpecker, Golden-crowned Kinglet, American Crow
+
+<img src="ghibli.png" width="49%"> <img src="ghibli-eink.png" width="49%">
