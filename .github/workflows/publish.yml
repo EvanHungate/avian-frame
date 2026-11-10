@@ -9,6 +9,7 @@ name: publish
 on:
   schedule:
     - cron: "23 9 * * *"   # daily, ~5 am Toronto (GitHub can start late; the frame wakes at 7)
+    - cron: "41 * * * *"   # TEMPORARY: hourly, to test that SenseCraft re-fetches. Remove after testing.
   workflow_dispatch:
 
 concurrency:
@@ -36,6 +37,7 @@ jobs:
       TITLE: ${{ vars.TITLE || 'Heard This Week' }}
       SUBTITLE: ${{ vars.SUBTITLE || 'Avian Visitors' }}
       FRAME_REV: ${{ vars.FRAME_REV }}
+      STAMP: ${{ vars.STAMP || '1' }}   # 'updated ...' label on the image; set var STAMP=0 to hide
       AV_ROOT: /home/runner/AvianVisitors
       AV_FRAME_DIR: /home/runner/AvianVisitors/frame
       STYLES_DIR: ${{ github.workspace }}/server/styles

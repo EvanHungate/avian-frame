@@ -13,6 +13,7 @@ publishes the folder with GitHub Pages so the frame needs no server:
                  tz=<POSIX>   time zone rule for the ESP32 clock
                  fw=<n>       newest firmware build (see firmware.yml)
   preview.png  6-ink panel simulation, frame.png full colour, index.html
+  frame.html   bare 800x480 page showing frame.png (for SenseCraft HMI)
 
 Same env vars as render_server.py (BW_STATION_ID, TITLE, STYLE, ...), plus
 WAKE_TIMES and TZ for the device, and FRAME_REV to force a redraw.
@@ -47,6 +48,33 @@ def posix_tz(name: str) -> str:
     raise SystemExit(f"unknown time zone {name!r}")
 
 
+def stamp(img, text):
+    """Burn a small 'updated ...' label into the bottom-right corner, so you can
+    tell on the panel whether a fresh copy was fetched. STAMP=0 turns it off."""
+    from PIL import ImageDraw, ImageFont
+    font = None
+    for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",):
+        try:
+            font = ImageFont.truetype(f, 16)
+            break
+        except OSError:
+            pass
+    if font is None:
+        try:
+            font = ImageFont.load_default(size=16)
+        except TypeError:  # Pillow < 10.1
+            font = ImageFont.load_default()
+    img = img.copy()
+    d = ImageDraw.Draw(img)
+    x0, y0, x1, y1 = d.textbbox((0, 0), text, font=font)
+    w, h = x1 - x0, y1 - y0
+    pad = 5
+    bx, by = img.width - w - 2 * pad - 6, img.height - h - 2 * pad - 6
+    d.rectangle([bx, by, bx + w + 2 * pad, by + h + 2 * pad], fill="white", outline="black")
+    d.text((bx + pad - x0, by + pad - y0), text, font=font, fill="black")
+    return img
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", type=Path, required=True)
@@ -65,6 +93,10 @@ def main():
     if not species:
         raise SystemExit("no species from BirdWeather")
     img = rs.render(species, style, out=str(Path(rs.CFG["data"]) / "render.png"))
+    now_local = dt.datetime.now(rs.CFG["tz"])
+    stamp_text = "updated " + now_local.strftime("%a %b %-d, %-I:%M %p")
+    if os.environ.get("STAMP", "1") not in ("0", "", "false", "no"):
+        img = stamp(img, stamp_text)
     fb, preview = rs.dither(img)
     if len(fb) != FB_BYTES:
         raise SystemExit(f"frame.bin is {len(fb)} bytes, expected {FB_BYTES}")
@@ -104,6 +136,16 @@ frame id <code>{frame_id}</code> &middot; wakes {html.escape(meta['wake'])} &mid
 <h2>What the panel shows</h2><img src="preview.png" alt="6-ink preview">
 <h2>Birds</h2><ul>{birds}</ul>
 <p><a href="frame.png">Full-colour render</a> &middot; <a href="meta.txt">meta.txt</a></p>
+""")
+    # Bare 800x480 page for SenseCraft HMI's Web page / HTML widget. The query
+    # string changes every publish so nothing serves a stale cached copy.
+    v = now_local.strftime("%Y%m%d%H%M")
+    (a.out / "frame.html").write_text(f"""<!doctype html><meta charset="utf-8">
+<meta name="viewport" content="width=800,height=480,initial-scale=1">
+<title>Avian Visitors</title>
+<style>html,body{{margin:0;padding:0;width:800px;height:480px;overflow:hidden;background:#fff}}
+img{{display:block;width:800px;height:480px}}</style>
+<img src="frame.png?v={v}" alt="">
 """)
     print(f"published {len(species)} species, frame id {frame_id}, meta {meta}")
 
