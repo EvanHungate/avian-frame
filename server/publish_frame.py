@@ -50,7 +50,7 @@ def posix_tz(name: str) -> str:
 
 def stamp(img, text):
     """Burn a small 'updated ...' label into the bottom-right corner, so you can
-    tell on the panel whether a fresh copy was fetched. STAMP=0 turns it off."""
+    tell on the panel whether a fresh copy was fetched. STAMP=1 turns it on."""
     from PIL import ImageDraw, ImageFont
     font = None
     for f in ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",):
@@ -95,7 +95,7 @@ def main():
     img = rs.render(species, style, out=str(Path(rs.CFG["data"]) / "render.png"))
     now_local = dt.datetime.now(rs.CFG["tz"])
     stamp_text = "updated " + now_local.strftime("%a %b %-d, %-I:%M %p")
-    if os.environ.get("STAMP", "1") not in ("0", "", "false", "no"):
+    if os.environ.get("STAMP", "0") not in ("0", "", "false", "no"):
         img = stamp(img, stamp_text)
     fb, preview = rs.dither(img)
     if len(fb) != FB_BYTES:

@@ -37,7 +37,7 @@ jobs:
       TITLE: ${{ vars.TITLE || '{date}' }}
       SUBTITLE: ${{ vars.SUBTITLE || 'Avian Visitors This Week' }}
       FRAME_REV: ${{ vars.FRAME_REV }}
-      STAMP: ${{ vars.STAMP || '1' }}   # 'updated ...' label on the image; set var STAMP=0 to hide
+      STAMP: ${{ vars.STAMP || '0' }}   # 'updated ...' label on the image; set var STAMP=1 to show
       AV_ROOT: /home/runner/AvianVisitors
       AV_FRAME_DIR: /home/runner/AvianVisitors/frame
       STYLES_DIR: ${{ github.workspace }}/server/styles
